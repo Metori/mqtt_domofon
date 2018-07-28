@@ -1,5 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <Bounce2.h>
 
 /* HW history
  * 0.1 - Initial hw for testing
@@ -10,25 +11,27 @@
  * SW history
  * 0.1 - Initial code. Has only one feature: auto open the door after incoming call.
  * 0.3 - Added MQTT over Wi-Fi support.
+ * 0.4 - State actions almost finished. MQTT part almost ready.
+ * 0.5 - Hangup detect delay added
  */
 
 #define DEVICE_NAME "MQTT Domofon controller by Artem Pinchuk"
 #define DEVICE_HW_VERSION "1.0"
-#define DEVICE_SW_VERSION "0.3"
+#define DEVICE_SW_VERSION "0.5"
 
 // ***** CONFIG *****
 // Hardware configuration
+#define LED_ON HIGH
+#define LED_OFF LOW
 #define RELAY_ON LOW
 #define RELAY_OFF HIGH
-#define BUTTON_OFF HIGH
-#define BUTTON_ON LOW
 
 const int PIN_BUTTON_OPEN = 5; //D1
 const int PIN_LED_CALL = 4; //D2
 const int PIN_LED_STATUS = 14; //D5
 const int PIN_CALL_DETECT = 12; //D6
 const int PIN_RELAY_ANSWER = 13; //D7
-const int PIN_RELAY_DOOR_OPEN = 2; //D4
+const int PIN_RELAY_DOOR_OPEN = 16; //D0
 
 // Software configuration
 const char* WIFI_SSID = "WIFI_SSID";
@@ -41,10 +44,15 @@ const char* MQTT_CLIENT_ID = "domofon";
 const char* MQTT_TOPIC_IN = "domofon/in";
 const char* MQTT_TOPIC_OUT = "domofon/out";
 
+unsigned long CALL_HANGUP_DETECT_DELAY = 2000;
+unsigned int RELAY_ANSWER_ON_TIME = 1100;
+unsigned int RELAY_OPEN_ON_TIME = 600;
+
 // High level protocol messages
 const uint8_t MSG_OUT_READY = 0x52; //'R'
 const uint8_t MSG_OUT_CALL = 0x43; //'C'
 const uint8_t MSG_OUT_HANGUP = 0x48; //'H'
+const uint8_t MSG_OUT_OPENED_BY_BUTTON = 0x42; //'B'
 const uint8_t MSG_OUT_SUCCESS = 0x53; //'S'
 const uint8_t MSG_OUT_FAIL = 0x46; //'F'
 const uint8_t MSG_IN_OPEN = 0x4F; //'O'
@@ -56,10 +64,18 @@ typedef enum {
   CALL
 } EState;
 
-EState state;
-unsigned long btnLastDebounceTime = 0;
-bool btnLastDebounceState = false;
-bool btnLastRealState = false;
+typedef enum {
+  NO_ACTION,
+  OPEN,
+  OPEN_BY_BUTTON,
+  REJECT
+} EAction;
+
+EState state = IDLE;
+EAction action = NO_ACTION;
+
+Bounce debouncerBtnOpen = Bounce();
+unsigned long lastCallDetectedTime = 0;
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -72,19 +88,19 @@ void gpioInit() {
   pinMode(PIN_RELAY_ANSWER, OUTPUT);
   pinMode(PIN_RELAY_DOOR_OPEN, OUTPUT);
 
-  digitalWrite(PIN_LED_STATUS, LOW);
-  digitalWrite(PIN_LED_CALL, LOW);
+  digitalWrite(PIN_LED_STATUS, LED_OFF);
+  digitalWrite(PIN_LED_CALL, LED_OFF);
   digitalWrite(PIN_RELAY_ANSWER, RELAY_OFF);
   digitalWrite(PIN_RELAY_DOOR_OPEN, RELAY_OFF);
 }
 
 void ledBlink(int* pins, int count) {
   for (int i = 0; i < count; i++) {
-    digitalWrite(pins[i], HIGH);
+    digitalWrite(pins[i], LED_ON);
   }
   delay(125);
   for (int i = 0; i < count; i++) {
-    digitalWrite(pins[i], LOW);
+    digitalWrite(pins[i], LED_OFF);
   }
 }
 
@@ -125,13 +141,13 @@ bool mqttReconnect() {
 
   state = IDLE;
   Serial.println("Current state: IDLE");
-  digitalWrite(PIN_LED_STATUS, HIGH);
+  digitalWrite(PIN_LED_STATUS, LED_ON);
   return true;
 }
 
 void wifiDisconnect() {
   WiFi.disconnect();
-  digitalWrite(PIN_LED_STATUS, LOW);
+  digitalWrite(PIN_LED_STATUS, LED_OFF);
 }
 
 void wifiConnect() {
@@ -145,9 +161,9 @@ void wifiConnect() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   
   while (WiFi.status() != WL_CONNECTED) {
-    digitalWrite(PIN_LED_STATUS, HIGH);
+    digitalWrite(PIN_LED_STATUS, LED_ON);
     delay(250);
-    digitalWrite(PIN_LED_STATUS, LOW);
+    digitalWrite(PIN_LED_STATUS, LED_OFF);
     delay(250);
     Serial.print(".");
   }
@@ -169,28 +185,56 @@ void allReconnect() {
   } while(!mqttReconnect());
 }
 
-bool isCalling() {
-  return digitalRead(PIN_CALL_DETECT) == HIGH;
-}
-
 void callAnswer() {
+  Serial.print("Call answer... ");
   digitalWrite(PIN_RELAY_DOOR_OPEN, RELAY_OFF);
   digitalWrite(PIN_RELAY_ANSWER, RELAY_ON);
+  Serial.println("Done");
 }
 
 void callHangUp() {
+  Serial.print("Hang up... ");
   digitalWrite(PIN_RELAY_ANSWER, RELAY_OFF);
   digitalWrite(PIN_RELAY_DOOR_OPEN, RELAY_OFF);
+  Serial.println("Done");
 }
 
 void doorOpen() {
+  Serial.print("Door open... ");
   digitalWrite(PIN_RELAY_DOOR_OPEN, RELAY_ON);
-  delay(500);
+  delay(RELAY_OPEN_ON_TIME);
   digitalWrite(PIN_RELAY_DOOR_OPEN, RELAY_OFF);
+  Serial.println("Done");
+}
+
+void answerAndOpen() {
+  callAnswer();
+  delay(RELAY_ANSWER_ON_TIME);
+  doorOpen();
+  callHangUp();
+}
+
+void answerAndReject() {
+  callAnswer();
+  delay(RELAY_ANSWER_ON_TIME);
+  callHangUp();
 }
 
 void onMqttMsgReceived(char* topic, byte* payload, unsigned int len) {
-  //TODO
+  if (len != 1) return;
+  uint8_t cmd = (uint8_t)payload[0];
+  switch (cmd) {
+    case MSG_IN_OPEN:
+      action = OPEN;
+      break;
+
+    case MSG_IN_REJECT:
+      action = REJECT;
+      break;
+
+    default:
+      break;
+  }
 }
 
 void mqttInit() {
@@ -198,43 +242,86 @@ void mqttInit() {
   mqttClient.setCallback(onMqttMsgReceived);
 }
 
-void setup() {
-  gpioInit();
-  Serial.begin(115200);
-  Serial.println("Boot-up success");
-
+void bootUpTest() {
   int pins[2] = {PIN_LED_STATUS, PIN_LED_CALL};
   ledBlink(pins, 2);
+  callAnswer();
+  delay(500);
+  callHangUp();
+  delay(500);
+  doorOpen();
+}
+
+void setup() {
+  gpioInit();
+  debouncerBtnOpen.attach(PIN_BUTTON_OPEN);
+  debouncerBtnOpen.interval(25);
+  Serial.begin(115200);
+  Serial.println();
+  Serial.println();
+  Serial.println(DEVICE_NAME " HW Ver. " DEVICE_HW_VERSION " SW Ver. " DEVICE_SW_VERSION);
+
+  bootUpTest();
 
   mqttInit();
 }
 
 void loop() {
-  if ( (WiFi.status() != WL_CONNECTED) || (!mqttClient.connected()) ) {
+  if ( (state == IDLE) && ( (WiFi.status() != WL_CONNECTED) || (!mqttClient.connected()) ) ) {
     allReconnect();
   }
 
+  mqttClient.loop();
+  debouncerBtnOpen.update();
+
   EState oldState = state;
-  state = isCalling() ? CALL : IDLE;
+  if (digitalRead(PIN_CALL_DETECT)) {
+    state = CALL;
+    lastCallDetectedTime = millis();
+  } else if (millis() - lastCallDetectedTime > CALL_HANGUP_DETECT_DELAY) {
+    state = IDLE;
+  }
 
   switch (state) {
     case IDLE:
-      if (oldState == CALL) {
+      if (oldState != IDLE) {
         msgSend(MSG_OUT_HANGUP);
-        digitalWrite(PIN_LED_CALL, LOW);
+        digitalWrite(PIN_LED_CALL, LED_OFF);
         Serial.println("Current state: IDLE");
+      }
+      if (action != NO_ACTION) {
+        msgSend(MSG_OUT_FAIL);
+        action = NO_ACTION;
       }
       break;
 
     case CALL:
-      if (oldState == IDLE){
+      if (oldState != CALL) {
+        action = NO_ACTION;
         msgSend(MSG_OUT_CALL);
-        digitalWrite(PIN_LED_CALL, HIGH);
+        digitalWrite(PIN_LED_CALL, LED_ON);
         Serial.println("Current state: CALL");
       }
-      
+      if (debouncerBtnOpen.fell() && action == NO_ACTION) action = OPEN_BY_BUTTON;
+      switch (action) {
+        case OPEN_BY_BUTTON:
+          answerAndOpen();
+          msgSend(MSG_OUT_OPENED_BY_BUTTON);
+          break;
+        case OPEN:
+          answerAndOpen();
+          msgSend(MSG_OUT_SUCCESS);
+          break;
+
+        case REJECT:
+          answerAndReject();
+          msgSend(MSG_OUT_SUCCESS);
+          break;
+
+        default:
+          break;
+      }
+      action = NO_ACTION;
       break;
   }
-
-  mqttClient.loop();
 }
