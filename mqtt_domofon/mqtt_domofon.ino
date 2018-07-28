@@ -108,10 +108,6 @@ void ledBlink(int pin) {
   ledBlink(&pin, 1);
 }
 
-bool readOpenButtonLoop() {
-  return false;
-}
-
 void msgSend(uint8_t msg) {
   mqttClient.publish(MQTT_TOPIC_OUT, &msg, 1);
 }
