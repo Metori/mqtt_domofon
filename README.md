@@ -10,6 +10,14 @@ This device can send "door open" command to intercom main unit after receiving o
 * Some resistors
 * Plastic housing
 
+## Status LED:
+* Blinks slowly when Wi-Fi is connecting
+* Blinks faster when MQTT client is connecting
+* Steady on when ready
+
+## Call LED:
+* Steady on when incoming call detected
+
 ## Incoming MQTT messages:
 * 'O' - door open command
 * 'N' - call reject command (door will not open)
