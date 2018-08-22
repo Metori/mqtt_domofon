@@ -5,8 +5,8 @@ This device can send "door open" command to intercom main unit after receiving o
 ## Parts used:
 * NodeMCU v3 x 1
 * Double relay module x1 (or two single relay modules)
-* LED x2
-* Button x1
+* LED x3
+* Button x2
 * Some resistors
 * Plastic housing
 
@@ -15,7 +15,7 @@ This device can send "door open" command to intercom main unit after receiving o
 * Blinks faster when MQTT client is connecting
 * Steady on when ready
 
-## Call LED:
+## Green and red LEDs:
 * Steady on when incoming call detected
 
 ## Incoming MQTT messages:
@@ -23,9 +23,10 @@ This device can send "door open" command to intercom main unit after receiving o
 * 'N' - call reject command (door will not open)
 
 ## Outgoing MQTT messages:
-* 'R' - ready; send after successfull boot-up
-* 'C' - call; send after detecting of incoming intercom call
-* 'H' - hangup; send after detected incoming call finished
-* 'B' - button; send when "door open" has been performed successfully by hw button press
-* 'S' - success; send in response to 'O' or 'N' command
-* 'F' - fail; send in response to 'O' or 'N' command (this means that 'O' or 'N' command has been received but no incoming call detected)
+* 'R' - ready; sent after successfull boot-up
+* 'C' - call; sent after detecting of incoming intercom call
+* 'H' - hangup; sent after detected incoming call finished
+* 'B' - button; sent when "door open" has been performed by green hw button press
+* 'J' - reJected; sent when incoming call has been rejected by red hw button press
+* 'S' - success; sent in response to 'O' or 'N' command
+* 'F' - fail; sent in response to 'O' or 'N' command (this means that 'O' or 'N' command has been received but no incoming call detected)
