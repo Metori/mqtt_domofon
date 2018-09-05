@@ -25,7 +25,7 @@ This device can send "door open" command to intercom main unit after receiving o
 * 'P' - ping command (answers with 'R')
 
 ## Outgoing MQTT messages:
-* 'R' - ready; sent after successfull boot-up
+* 'R' - ready; sent after successfull boot-up or after receiving of 'P' message
 * 'C' - call; sent after detecting of incoming intercom call
 * 'H' - hangup; sent after detected incoming call finished
 * 'B' - button; sent when "door open" has been performed by green hw button press
