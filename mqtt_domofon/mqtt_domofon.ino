@@ -6,6 +6,7 @@
  * 0.1 - Initial hw for testing
  * 1.0 - Device installed in white box housing. Can be mounted on the wall like domofon terminal
  * 1.1 - Added red reject button and red reject LED
+ * 1.2 - Diode added
  */
 
 /*
@@ -15,11 +16,12 @@
  * 0.4 - State actions almost finished. MQTT part almost ready
  * 0.5 - Hangup detect delay added
  * 0.6 - Added support for new reject button and red reject led. Relay delays tuned
+ * 0.7 - "Last will" message added. Ping request added
  */
 
 #define DEVICE_NAME "MQTT Domofon controller by Artem Pinchuk"
-#define DEVICE_HW_VERSION "1.1"
-#define DEVICE_SW_VERSION "0.6"
+#define DEVICE_HW_VERSION "1.2"
+#define DEVICE_SW_VERSION "0.7"
 
 // ***** CONFIG *****
 // Hardware configuration
@@ -54,6 +56,7 @@ unsigned int RELAY_OPEN_ON_TIME = 600;
 
 // High level protocol messages
 const uint8_t MSG_OUT_READY = 0x52; //'R'
+const char* MSG_OUT_LAST_WILL = "L"; //null terminated 'L'
 const uint8_t MSG_OUT_CALL = 0x43; //'C'
 const uint8_t MSG_OUT_HANGUP = 0x48; //'H'
 const uint8_t MSG_OUT_OPENED_BY_BUTTON = 0x42; //'B'
@@ -62,6 +65,7 @@ const uint8_t MSG_OUT_SUCCESS = 0x53; //'S'
 const uint8_t MSG_OUT_FAIL = 0x46; //'F'
 const uint8_t MSG_IN_OPEN = 0x4F; //'O'
 const uint8_t MSG_IN_REJECT = 0x4E; //'N'
+const uint8_t MSG_IN_PING = 0x50; //P
 // ***** END OF CONFIG *****
 
 typedef enum {
@@ -130,7 +134,13 @@ bool mqttReconnect() {
   Serial.print("...");
 
   for (int i = 0; !mqttClient.connected(); i++) {
-    if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER_NAME, MQTT_USER_PASSWORD)) {
+    if (mqttClient.connect(MQTT_CLIENT_ID,
+                           MQTT_USER_NAME,
+                           MQTT_USER_PASSWORD,
+                           MQTT_TOPIC_OUT,
+                           0,
+                           0,
+                           MSG_OUT_LAST_WILL)) {
       msgSend(MSG_OUT_READY);
       mqttClient.subscribe(MQTT_TOPIC_IN);
     } else {
@@ -236,6 +246,10 @@ void onMqttMsgReceived(char* topic, byte* payload, unsigned int len) {
 
     case MSG_IN_REJECT:
       action = REJECT;
+      break;
+
+    case MSG_IN_PING:
+      msgSend(MSG_OUT_READY);
       break;
 
     default:
