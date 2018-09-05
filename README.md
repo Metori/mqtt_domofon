@@ -8,6 +8,7 @@ This device can send "door open" command to intercom main unit after receiving o
 * LED x3
 * Button x2
 * Some resistors
+* One diode
 * Plastic housing
 
 ## Status LED:
@@ -21,6 +22,7 @@ This device can send "door open" command to intercom main unit after receiving o
 ## Incoming MQTT messages:
 * 'O' - door open command
 * 'N' - call reject command (door will not open)
+* 'P' - ping command (answers with 'R')
 
 ## Outgoing MQTT messages:
 * 'R' - ready; sent after successfull boot-up
@@ -30,3 +32,4 @@ This device can send "door open" command to intercom main unit after receiving o
 * 'J' - reJected; sent when incoming call has been rejected by red hw button press
 * 'S' - success; sent in response to 'O' or 'N' command
 * 'F' - fail; sent in response to 'O' or 'N' command (this means that 'O' or 'N' command has been received but no incoming call detected)
+* 'L' - last will message; send when device goes offline
