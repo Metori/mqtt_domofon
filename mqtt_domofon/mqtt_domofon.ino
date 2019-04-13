@@ -51,6 +51,8 @@ const char* MQTT_TOPIC_IN = "domofon/in";
 const char* MQTT_TOPIC_OUT = "domofon/out";
 
 unsigned long CALL_HANGUP_DETECT_DELAY = 2000;
+unsigned long CALL_OPEN_RECOVERY_WINDOW = 5000;
+unsigned int CALL_OPEN_RECOVERY_MAX_ATTEMPTS = 3;
 unsigned int RELAY_ANSWER_ON_TIME = 1200;
 unsigned int RELAY_OPEN_ON_TIME = 600;
 
@@ -60,6 +62,7 @@ const char*   MSG_OUT_LAST_WILL = "L"; //null terminated 'L'
 const uint8_t MSG_OUT_CALL = 'C';
 const uint8_t MSG_OUT_HANGUP = 'H';
 const uint8_t MSG_OUT_OPENED_BY_BUTTON = 'B';
+const uint8_t MSG_OUT_OPENED_BY_RECOVERY = 'V';
 const uint8_t MSG_OUT_REJECTED_BY_BUTTON = 'J';
 const uint8_t MSG_OUT_SUCCESS = 'S';
 const uint8_t MSG_OUT_FAIL = 'F';
@@ -77,6 +80,7 @@ typedef enum {
   NO_ACTION,
   OPEN,
   OPEN_BY_BUTTON,
+  OPEN_BY_RECOVERY,
   REJECT,
   REJECT_BY_BUTTON
 } EAction;
@@ -87,6 +91,8 @@ EAction action = NO_ACTION;
 Bounce debouncerBtnGreen = Bounce();
 Bounce debouncerBtnRed = Bounce();
 unsigned long lastCallDetectedTime = 0;
+unsigned long lastOpenTime = 0;
+unsigned int recoveryAttempts = 0;
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -228,6 +234,7 @@ void answerAndOpen() {
   delay(RELAY_ANSWER_ON_TIME);
   doorOpen();
   callHangUp();
+  lastOpenTime = millis();
 }
 
 void answerAndReject() {
@@ -293,6 +300,10 @@ void loop() {
     allReconnect();
   }
 
+  if ((recoveryAttempts > 0) && ((millis() - lastOpenTime) > CALL_OPEN_RECOVERY_WINDOW)) {
+    recoveryAttempts = 0;
+  }
+
   mqttClient.loop();
   debouncerBtnGreen.update();
   debouncerBtnRed.update();
@@ -321,17 +332,29 @@ void loop() {
 
     case CALL:
       if (oldState != CALL) {
-        action = NO_ACTION;
         msgSend(MSG_OUT_CALL);
         digitalWrite(PIN_LED_GREEN, LED_ON);
         digitalWrite(PIN_LED_RED, LED_ON);
         Serial.println("Current state: CALL");
+
+        if ((recoveryAttempts < CALL_OPEN_RECOVERY_MAX_ATTEMPTS) &&
+            ((millis() - lastOpenTime) <= CALL_OPEN_RECOVERY_WINDOW)) {
+          action = OPEN_BY_RECOVERY;
+          recoveryAttempts++;
+        } else {
+          action = NO_ACTION;
+        }
       }
       if (action == NO_ACTION) {
         if (debouncerBtnRed.fell()) action = REJECT_BY_BUTTON;
         else if (debouncerBtnGreen.fell()) action = OPEN_BY_BUTTON;
       }
       switch (action) {
+        case OPEN_BY_RECOVERY:
+          answerAndOpen();
+          msgSend(MSG_OUT_OPENED_BY_RECOVERY);
+          break;
+
         case OPEN_BY_BUTTON:
           answerAndOpen();
           msgSend(MSG_OUT_OPENED_BY_BUTTON);
