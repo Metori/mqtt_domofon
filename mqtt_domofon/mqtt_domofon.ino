@@ -17,11 +17,12 @@
  * 0.5 - Hangup detect delay added
  * 0.6 - Added support for new reject button and red reject led. Relay delays tuned
  * 0.7 - "Last will" message added. Ping request added
+ * 1.0 - Recovery feature added. Device has been tested in real life for 1 year
  */
 
 #define DEVICE_NAME "MQTT Domofon controller by Artem Pinchuk"
 #define DEVICE_HW_VERSION "1.2"
-#define DEVICE_SW_VERSION "0.7"
+#define DEVICE_SW_VERSION "1.0"
 
 // ***** CONFIG *****
 // Hardware configuration
