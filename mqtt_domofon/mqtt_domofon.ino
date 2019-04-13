@@ -55,17 +55,17 @@ unsigned int RELAY_ANSWER_ON_TIME = 1200;
 unsigned int RELAY_OPEN_ON_TIME = 600;
 
 // High level protocol messages
-const uint8_t MSG_OUT_READY = 0x52; //'R'
-const char* MSG_OUT_LAST_WILL = "L"; //null terminated 'L'
-const uint8_t MSG_OUT_CALL = 0x43; //'C'
-const uint8_t MSG_OUT_HANGUP = 0x48; //'H'
-const uint8_t MSG_OUT_OPENED_BY_BUTTON = 0x42; //'B'
-const uint8_t MSG_OUT_REJECTED_BY_BUTTON = 0x4A; //'J'
-const uint8_t MSG_OUT_SUCCESS = 0x53; //'S'
-const uint8_t MSG_OUT_FAIL = 0x46; //'F'
-const uint8_t MSG_IN_OPEN = 0x4F; //'O'
-const uint8_t MSG_IN_REJECT = 0x4E; //'N'
-const uint8_t MSG_IN_PING = 0x50; //P
+const uint8_t MSG_OUT_READY = 'R';
+const char*   MSG_OUT_LAST_WILL = "L"; //null terminated 'L'
+const uint8_t MSG_OUT_CALL = 'C';
+const uint8_t MSG_OUT_HANGUP = 'H';
+const uint8_t MSG_OUT_OPENED_BY_BUTTON = 'B';
+const uint8_t MSG_OUT_REJECTED_BY_BUTTON = 'J';
+const uint8_t MSG_OUT_SUCCESS = 'S';
+const uint8_t MSG_OUT_FAIL = 'F';
+const uint8_t MSG_IN_OPEN = 'O';
+const uint8_t MSG_IN_REJECT = 'N';
+const uint8_t MSG_IN_PING = 'P';
 // ***** END OF CONFIG *****
 
 typedef enum {
